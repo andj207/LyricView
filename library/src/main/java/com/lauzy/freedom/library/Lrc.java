@@ -10,9 +10,11 @@ package com.lauzy.freedom.library;
 public class Lrc {
     private long time;
     private String text;
+    private String timeFormatted = "";
 
     public void setTime(long time) {
         this.time = time;
+        timeFormatted = LrcHelper.formatTime(time);
     }
 
     public void setText(String text) {
@@ -21,6 +23,10 @@ public class Lrc {
 
     public long getTime() {
         return time;
+    }
+
+    public String getTimeFormatted() {
+        return timeFormatted;
     }
 
     public String getText() {

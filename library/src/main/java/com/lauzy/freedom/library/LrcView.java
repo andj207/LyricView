@@ -9,14 +9,17 @@ import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.os.Looper;
-import android.support.annotation.ColorInt;
-import android.support.annotation.Nullable;
-import android.support.v4.content.ContextCompat;
-import android.support.v4.view.ViewCompat;
+
+import androidx.annotation.ColorInt;
+import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+import androidx.core.view.ViewCompat;
+
 import android.text.Layout;
 import android.text.StaticLayout;
 import android.text.TextPaint;
 import android.util.AttributeSet;
+import android.util.SparseArray;
 import android.util.TypedValue;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
@@ -25,7 +28,7 @@ import android.view.ViewConfiguration;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.OverScroller;
 
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -38,7 +41,12 @@ import java.util.List;
 public class LrcView extends View {
 
     private static final String DEFAULT_CONTENT = "Empty";
+
     private List<Lrc> mLrcData;
+    private List<StaticLayout> mLrcTextLayouts = new ArrayList<>();
+
+    private StaticLayout emptyLrc;
+
     private TextPaint mTextPaint;
     private String mDefaultContent;
     private int mCurrentLine;
@@ -149,7 +157,7 @@ public class LrcView extends View {
         super.onLayout(changed, left, top, right, bottom);
         if (changed) {
             mPlayRect.left = (int) mIndicatorMargin;
-            mPlayRect.top = (int) (getHeight() / 2 - mIconHeight / 2);
+            mPlayRect.top = (int) ((getHeight() - mIconHeight) * 0.5f);
             mPlayRect.right = (int) (mPlayRect.left + mIconWidth);
             mPlayRect.bottom = (int) (mPlayRect.top + mIconHeight);
             mPlayDrawable.setBounds(mPlayRect);
@@ -169,13 +177,33 @@ public class LrcView extends View {
     }
 
     private int getLrcCount() {
-        return mLrcData.size();
+        return mLrcData != null ? mLrcData.size() : 0;
     }
 
     public void setLrcData(List<Lrc> lrcData) {
-        resetView(DEFAULT_CONTENT);
+        resetView(mDefaultContent);
         mLrcData = lrcData;
+        buildLrcMap();
         invalidate();
+    }
+
+    private void buildLrcMap() {
+        mLrcTextLayouts.clear();
+        mTextPaint.setTextSize(mLrcTextSize);
+        int lrcWidth = getLrcWidth();
+        for (int i = 0; i < mLrcData.size(); i++) {
+            mLrcTextLayouts.add(
+                    new StaticLayout(
+                            mLrcData.get(i).getText(),
+                            mTextPaint,
+                            lrcWidth,
+                            Layout.Alignment.ALIGN_NORMAL,
+                            1f,
+                            0f,
+                            false
+                    )
+            );
+        }
     }
 
     @Override
@@ -188,54 +216,54 @@ public class LrcView extends View {
         int indicatePosition = getIndicatePosition();
         mTextPaint.setTextSize(mLrcTextSize);
         mTextPaint.setTextAlign(Paint.Align.CENTER);
-        float y = getLrcHeight() / 2f;
-        float x = getLrcWidth() / 2f + getPaddingLeft();
+        float height = getLrcHeight();
+        float width = getLrcWidth();
+        float y = height * 0.5f;
+        float x = width * 0.5f + getPaddingLeft();
+        float preLrcHeight = 0f;
+        float lrcHeight;
+        float lrcHeightHalf;
         for (int i = 0; i < getLrcCount(); i++) {
+            StaticLayout staticLayout = mLrcTextLayouts.get(i);
+            lrcHeight = staticLayout.getHeight();
+            lrcHeightHalf = lrcHeight * 0.5f;
             if (i > 0) {
-                y += (getTextHeight(i - 1) + getTextHeight(i)) / 2f + mLrcLineSpaceHeight;
+                y += (preLrcHeight + lrcHeight) * 0.5f + mLrcLineSpaceHeight;
             }
-            if (mCurrentLine == i) {
-                mTextPaint.setColor(mCurrentPlayLineColor);
-                mTextPaint.setFakeBoldText(isCurrentTextBold);
-            } else if (indicatePosition == i && isShowTimeIndicator) {
-                mTextPaint.setFakeBoldText(isLrcIndicatorTextBold);
-                mTextPaint.setColor(mCurrentIndicateLineTextColor);
-            } else {
-                mTextPaint.setFakeBoldText(false);
-                mTextPaint.setColor(mNormalColor);
+
+            float yDelta = y - lrcHeightHalf - mOffset;
+            if (yDelta > -lrcHeightHalf && yDelta < height){
+                if (mCurrentLine == i) {
+                    mTextPaint.setColor(mCurrentPlayLineColor);
+                    mTextPaint.setFakeBoldText(isCurrentTextBold);
+                } else if (indicatePosition == i && isShowTimeIndicator) {
+                    mTextPaint.setFakeBoldText(isLrcIndicatorTextBold);
+                    mTextPaint.setColor(mCurrentIndicateLineTextColor);
+                } else {
+                    mTextPaint.setFakeBoldText(false);
+                    mTextPaint.setColor(mNormalColor);
+                }
+
+                canvas.save();
+                canvas.translate(x, yDelta);
+                staticLayout.draw(canvas);
+                canvas.restore();
             }
-            drawLrc(canvas, x, y, i);
+            preLrcHeight = lrcHeight;
         }
 
         if (isShowTimeIndicator) {
             mPlayDrawable.draw(canvas);
-            long time = mLrcData.get(indicatePosition).getTime();
-            float timeWidth = mIndicatorPaint.measureText(LrcHelper.formatTime(time));
+            String time = mLrcData.get(indicatePosition).getTimeFormatted();
+            float timeWidth = mIndicatorPaint.measureText(time);
             mIndicatorPaint.setColor(mIndicatorLineColor);
-            canvas.drawLine(mPlayRect.right + mIconLineGap, getHeight() / 2f,
-                    getWidth() - timeWidth * 1.3f, getHeight() / 2f, mIndicatorPaint);
-            int baseX = (int) (getWidth() - timeWidth * 1.1f);
-            float baseline = getHeight() / 2f - (mIndicatorPaint.descent() - mIndicatorPaint.ascent()) / 2 - mIndicatorPaint.ascent();
+            canvas.drawLine(mPlayRect.right + mIconLineGap, height * 0.5f,
+                    width - timeWidth * 1.3f, height * 0.5f, mIndicatorPaint);
+            int baseX = (int) (width - timeWidth * 1.1f);
+            float baseline = height * 0.5f - (mIndicatorPaint.descent() - mIndicatorPaint.ascent()) * 0.5f - mIndicatorPaint.ascent();
             mIndicatorPaint.setColor(mIndicatorTextColor);
-            canvas.drawText(LrcHelper.formatTime(time), baseX, baseline, mIndicatorPaint);
+            canvas.drawText(time, baseX, baseline, mIndicatorPaint);
         }
-    }
-
-    private HashMap<String, StaticLayout> mLrcMap = new HashMap<>();
-
-    private void drawLrc(Canvas canvas, float x, float y, int i) {
-        String text = mLrcData.get(i).getText();
-        StaticLayout staticLayout = mLrcMap.get(text);
-        if (staticLayout == null) {
-            mTextPaint.setTextSize(mLrcTextSize);
-            staticLayout = new StaticLayout(text, mTextPaint, getLrcWidth(),
-                    Layout.Alignment.ALIGN_NORMAL, 1f, 0f, false);
-            mLrcMap.put(text, staticLayout);
-        }
-        canvas.save();
-        canvas.translate(x, y - staticLayout.getHeight() / 2f - mOffset);
-        staticLayout.draw(canvas);
-        canvas.restore();
     }
 
     //中间空文字
@@ -244,10 +272,12 @@ public class LrcView extends View {
         mTextPaint.setColor(mNoLrcTextColor);
         mTextPaint.setTextSize(mNoLrcTextSize);
         canvas.save();
-        StaticLayout staticLayout = new StaticLayout(mDefaultContent, mTextPaint,
-                getLrcWidth(), Layout.Alignment.ALIGN_NORMAL, 1f, 0f, false);
+        if (emptyLrc == null){
+            emptyLrc = new StaticLayout(mDefaultContent, mTextPaint,
+                    getLrcWidth(), Layout.Alignment.ALIGN_NORMAL, 1f, 0f, false);
+        }
         canvas.translate(getLrcWidth() / 2f + getPaddingLeft(), getLrcHeight() / 2f);
-        staticLayout.draw(canvas);
+        emptyLrc.draw(canvas);
         canvas.restore();
     }
 
@@ -336,18 +366,14 @@ public class LrcView extends View {
         return tempY;
     }
 
-    private HashMap<String, StaticLayout> mStaticLayoutHashMap = new HashMap<>();
-
     private float getTextHeight(int linePosition) {
-        String text = mLrcData.get(linePosition).getText();
-        StaticLayout staticLayout = mStaticLayoutHashMap.get(text);
-        if (staticLayout == null) {
-            mTextPaint.setTextSize(mLrcTextSize);
-            staticLayout = new StaticLayout(text, mTextPaint,
-                    getLrcWidth(), Layout.Alignment.ALIGN_NORMAL, 1f, 0f, false);
-            mStaticLayoutHashMap.put(text, staticLayout);
+        if (linePosition >= 0 && linePosition < mLrcTextLayouts.size()){
+            StaticLayout staticLayout = mLrcTextLayouts.get(linePosition);
+            return staticLayout != null ? staticLayout.getHeight() : 0f;
         }
-        return staticLayout.getHeight();
+        else {
+            return 0f;
+        }
     }
 
     private boolean overScrolled() {
@@ -488,8 +514,7 @@ public class LrcView extends View {
         if (mLrcData != null) {
             mLrcData.clear();
         }
-        mLrcMap.clear();
-        mStaticLayoutHashMap.clear();
+        mLrcTextLayouts.clear();
         mCurrentLine = 0;
         mOffset = 0;
         isUserScroll = false;
