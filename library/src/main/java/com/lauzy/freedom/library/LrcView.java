@@ -87,6 +87,7 @@ public class LrcView extends View {
     private int mIndicatorTouchDelay;
     private boolean isCurrentTextBold;
     private boolean isLrcIndicatorTextBold;
+    private Paint.Align textAlignment = Paint.Align.CENTER;
 
     public LrcView(Context context) {
         this(context, null);
@@ -140,7 +141,7 @@ public class LrcView extends View {
 
         mTextPaint = new TextPaint();
         mTextPaint.setAntiAlias(true);
-        mTextPaint.setTextAlign(Paint.Align.CENTER);
+        mTextPaint.setTextAlign(textAlignment);
         mTextPaint.setTextSize(mLrcTextSize);
         mDefaultContent = DEFAULT_CONTENT;
 
@@ -180,6 +181,27 @@ public class LrcView extends View {
         return mLrcData != null ? mLrcData.size() : 0;
     }
 
+    /**
+     * Set alignment from View's constant for example View.TEXT_ALIGNMENT_VIEW_START
+     * @param alignment
+     */
+    public void setLrcAlignment(Integer alignment, boolean isRTL){
+        Paint.Align align = Paint.Align.CENTER;
+        switch (alignment){
+            case View.TEXT_ALIGNMENT_TEXT_START:
+            case View.TEXT_ALIGNMENT_VIEW_START:
+                align = isRTL ? Paint.Align.RIGHT : Paint.Align.LEFT;
+                break;
+
+            case View.TEXT_ALIGNMENT_TEXT_END:
+            case View.TEXT_ALIGNMENT_VIEW_END:
+                align = isRTL ? Paint.Align.LEFT : Paint.Align.RIGHT;
+                break;
+        }
+        textAlignment = align;
+        mTextPaint.setTextAlign(align);
+    }
+
     public void setLrcData(List<Lrc> lrcData) {
         resetView(mDefaultContent);
         mLrcData = lrcData;
@@ -191,10 +213,11 @@ public class LrcView extends View {
         mLrcTextLayouts.clear();
         mTextPaint.setTextSize(mLrcTextSize);
         int lrcWidth = getLrcWidth();
-        for (int i = 0; i < mLrcData.size(); i++) {
+
+        for (Lrc lrc : mLrcData) {
             mLrcTextLayouts.add(
                     new StaticLayout(
-                            mLrcData.get(i).getText(),
+                            lrc.getText(),
                             mTextPaint,
                             lrcWidth,
                             Layout.Alignment.ALIGN_NORMAL,
@@ -215,23 +238,25 @@ public class LrcView extends View {
         }
         int indicatePosition = getIndicatePosition();
         mTextPaint.setTextSize(mLrcTextSize);
-        mTextPaint.setTextAlign(Paint.Align.CENTER);
+        mTextPaint.setTextAlign(textAlignment);
         float height = getLrcHeight();
         float width = getLrcWidth();
         float y = height * 0.5f;
-        float x = width * 0.5f + getPaddingLeft();
+        float x = (textAlignment == Paint.Align.CENTER ? width * 0.5f : 0f) + getPaddingStart();
         float preLrcHeight = 0f;
         float lrcHeight;
         float lrcHeightHalf;
-        for (int i = 0; i < getLrcCount(); i++) {
-            StaticLayout staticLayout = mLrcTextLayouts.get(i);
+        float yDelta;
+        StaticLayout staticLayout;
+        for (int i = 0; i < mLrcTextLayouts.size(); i++) {
+            staticLayout = mLrcTextLayouts.get(i);
             lrcHeight = staticLayout.getHeight();
             lrcHeightHalf = lrcHeight * 0.5f;
             if (i > 0) {
                 y += (preLrcHeight + lrcHeight) * 0.5f + mLrcLineSpaceHeight;
             }
 
-            float yDelta = y - lrcHeightHalf - mOffset;
+            yDelta = y - lrcHeightHalf - mOffset;
             if (yDelta > -lrcHeightHalf && yDelta < height){
                 if (mCurrentLine == i) {
                     mTextPaint.setColor(mCurrentPlayLineColor);
