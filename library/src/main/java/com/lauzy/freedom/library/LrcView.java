@@ -277,7 +277,7 @@ public class LrcView extends View {
             preLrcHeight = lrcHeight;
         }
 
-        if (isShowTimeIndicator) {
+        if (isShowTimeIndicator && isAutoAdjustPosition) {
             mPlayDrawable.draw(canvas);
             String time = mLrcData.get(indicatePosition).getTimeFormatted();
             float timeWidth = mIndicatorPaint.measureText(time);
@@ -569,6 +569,7 @@ public class LrcView extends View {
      */
     public void pause() {
         isAutoAdjustPosition = false;
+        removeCallbacks(mScrollRunnable);
         invalidateView();
     }
 
