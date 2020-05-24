@@ -3,6 +3,7 @@ package com.lauzy.freedom.library;
 import android.content.Context;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -12,9 +13,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.StringReader;
 import java.io.UnsupportedEncodingException;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -36,7 +36,7 @@ public class LrcHelper {
     private static final String LINE_REGEX = "((\\[\\d{2}:\\d{2}\\.\\d{2}])+)(.*)";
     private static final String TIME_REGEX = "\\[(\\d{2}):(\\d{2})\\.(\\d{2})]";
 
-    public static List<Lrc> parseLrcFromAssets(Context context, String fileName) {
+    public static LyricInfo parseLrcFromAssets(Context context, String fileName) {
         try {
             return parseInputStream(context.getResources().getAssets().open(fileName));
         } catch (IOException e) {
@@ -45,7 +45,7 @@ public class LrcHelper {
         return null;
     }
 
-    public static List<Lrc> parseLrcFromFile(File file) {
+    public static LyricInfo parseLrcFromFile(File file) {
         try {
             return parseInputStream(new FileInputStream(file));
         } catch (FileNotFoundException e) {
@@ -54,31 +54,81 @@ public class LrcHelper {
         return null;
     }
 
-    public static List<Lrc> parseLrcFromString(@NonNull String data) {
+    @Nullable
+    public static LyricInfo parseLrcFromString(@NonNull String data) {
         try {
-            return parseInputStream(new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8)));
+            return parseInputStream(new ByteArrayInputStream(data.getBytes(Charset.forName("UTF-8"))));
         } catch (Throwable e) {
             e.printStackTrace();
         }
         return null;
     }
 
-    private static List<Lrc> parseInputStream(InputStream inputStream) {
+    private static LyricInfo parseInputStream(InputStream inputStream) {
+        LyricInfo lyricInfo = new LyricInfo();
         List<Lrc> lrcs = new ArrayList<>();
+        lyricInfo.songLines = lrcs;
+
         InputStreamReader isr = null;
         BufferedReader br = null;
+
         try {
             isr = new InputStreamReader(inputStream, CHARSET);
             br = new BufferedReader(isr);
             String line;
             while ((line = br.readLine()) != null) {
-                List<Lrc> lrcList = parseLrc(line);
-                if (lrcList != null && lrcList.size() != 0) {
-                    lrcs.addAll(lrcList);
+                int index = line.lastIndexOf("]");
+                if (line.startsWith("[offset:")) {
+                    // time offset
+                    lyricInfo.songOffset = Long.parseLong(line.substring(8, index).trim());
+                }
+                else if (line.startsWith("[length:")) {
+                    // length
+                    String lengthString = line.substring(8, index).trim();
+                    String[] values = lengthString.split(":");
+                    if (values.length == 2){
+                        int minute = Integer.parseInt(values[0]);
+                        float second = Float.parseFloat(values[1]);
+                        lyricInfo.length = (long) ((minute * 60 + second) * 1000);
+                    }
+                }
+                else if (line.startsWith("[ti:")) {
+                    // title
+                    lyricInfo.songTitle = line.substring(4, index).trim();
+                }
+                else if (line.startsWith("[ar:")) {
+                    // artist
+                    lyricInfo.songArtist = line.substring(4, index).trim();
+                }
+                else if (line.startsWith("[al:")) {
+                    // album
+                    lyricInfo.songAlbum = line.substring(4, index).trim();
+                }
+                else if (line.startsWith("[au:")) {
+                    // Creator of the Songtext
+                    lyricInfo.author = line.substring(4, index).trim();
+                }
+                else if (line.startsWith("[re:")) {
+                    // editor that created the LRC file
+                    lyricInfo.re = line.substring(4, index).trim();
+                }
+                else if (line.startsWith("[ve:")) {
+                    // version of program
+                    lyricInfo.version = line.substring(4, index).trim();
+                }
+                else if (line.startsWith("[by:")) {
+                    // Creator of the LRC file
+                    lyricInfo.by = line.substring(4, index).trim();
+                }
+                else {
+                    List<Lrc> lrcList = parseLrc(line);
+                    if (lrcList != null && lrcList.size() != 0) {
+                        lrcs.addAll(lrcList);
+                    }
                 }
             }
             sortLrcs(lrcs);
-            return lrcs;
+            return lyricInfo;
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
         } catch (IOException e) {
@@ -95,7 +145,7 @@ public class LrcHelper {
                 e1.printStackTrace();
             }
         }
-        return lrcs;
+        return lyricInfo;
     }
 
     private static void sortLrcs(List<Lrc> lrcs) {
@@ -122,13 +172,9 @@ public class LrcHelper {
         Matcher timeMatcher = Pattern.compile(TIME_REGEX).matcher(time);
 
         while (timeMatcher.find()) {
-            String min = timeMatcher.group(1);
-            String sec = timeMatcher.group(2);
-            String mil = timeMatcher.group(3);
             Lrc lrc = new Lrc();
             if (content != null && content.length() != 0) {
-                lrc.setTime(Long.parseLong(min) * 60 * 1000 + Long.parseLong(sec) * 1000
-                        + Long.parseLong(mil) * 10);
+                lrc.setTime(parseTime(timeMatcher));
                 lrc.setText(content);
                 lrcs.add(lrc);
             }
@@ -136,10 +182,19 @@ public class LrcHelper {
         return lrcs;
     }
 
+    public static long parseTime(Matcher timeMatcher) {
+        String min = timeMatcher.group(1);
+        String sec = timeMatcher.group(2);
+        String mil = timeMatcher.group(3);
+        return Long.parseLong(min) * 60 * 1000 + Long.parseLong(sec) * 1000
+                + Long.parseLong(mil) * 10;
+    }
+
     public static String formatTime(long time) {
         int min = (int) (time / 60000);
         int sec = (int) (time / 1000 % 60);
-        return adjustFormat(min) + ":" + adjustFormat(sec);
+        int millis = (int) (time - (min * 60 + sec) * 1000) / 10;
+        return adjustFormat(min) + ":" + adjustFormat(sec) + "." + adjustFormat(millis);
     }
 
     private static String adjustFormat(int time) {
