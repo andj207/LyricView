@@ -57,7 +57,7 @@ public class LrcHelper {
     @Nullable
     public static LyricInfo parseLrcFromString(@NonNull String data) {
         try {
-            return parseInputStream(new ByteArrayInputStream(data.getBytes(Charset.forName("UTF-8"))));
+            return parseInputStream(new ByteArrayInputStream(data.getBytes(CHARSET)));
         } catch (Throwable e) {
             e.printStackTrace();
         }

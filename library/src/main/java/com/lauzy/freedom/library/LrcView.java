@@ -89,6 +89,8 @@ public class LrcView extends View {
     private boolean isLrcIndicatorTextBold;
     private Paint.Align textAlignment = Paint.Align.CENTER;
 
+    private long timelineOffset = 0L;
+
     public LrcView(Context context) {
         this(context, null);
     }
@@ -209,6 +211,18 @@ public class LrcView extends View {
         invalidate();
     }
 
+    public void setTimelineOffset(long timelineOffset) {
+        this.timelineOffset = timelineOffset;
+    }
+
+    public long getTimelineOffset() {
+        return timelineOffset;
+    }
+
+    public boolean hasLyrics(){
+        return mLrcData != null && mLrcData.size() > 0;
+    }
+
     private void buildLrcMap() {
         mLrcTextLayouts.clear();
         mTextPaint.setTextSize(mLrcTextSize);
@@ -279,12 +293,13 @@ public class LrcView extends View {
 
         if (isShowTimeIndicator && isAutoAdjustPosition) {
             mPlayDrawable.draw(canvas);
+            int paddingStart = getPaddingStart();
             String time = mLrcData.get(indicatePosition).getTimeFormatted();
             float timeWidth = mIndicatorPaint.measureText(time);
             mIndicatorPaint.setColor(mIndicatorLineColor);
             canvas.drawLine(mPlayRect.right + mIconLineGap, height * 0.5f,
                     width - timeWidth * 1.3f, height * 0.5f, mIndicatorPaint);
-            int baseX = (int) (width - timeWidth * 1.1f);
+            int baseX = (int) (width - timeWidth * 1.1f) + paddingStart;
             float baseline = height * 0.5f - (mIndicatorPaint.descent() - mIndicatorPaint.ascent()) * 0.5f - mIndicatorPaint.ascent();
             mIndicatorPaint.setColor(mIndicatorTextColor);
             canvas.drawText(time, baseX, baseline, mIndicatorPaint);
@@ -306,11 +321,11 @@ public class LrcView extends View {
         canvas.restore();
     }
 
-    public void updateTime(long time) {
+    public void updateTime(long progress) {
         if (isLrcEmpty()) {
             return;
         }
-        int linePosition = getUpdateTimeLinePosition(time);
+        int linePosition = getUpdateTimeLinePosition(progress);
         if (mCurrentLine != linePosition) {
             mCurrentLine = linePosition;
             if (isUserScroll) {
@@ -321,17 +336,23 @@ public class LrcView extends View {
         }
     }
 
-    private int getUpdateTimeLinePosition(long time) {
+    private int getUpdateTimeLinePosition(long progress) {
         int linePos = 0;
-        for (int i = 0; i < getLrcCount(); i++) {
+        int total = getLrcCount();
+        if (progress != 0){
+            progress += timelineOffset;
+        }
+        for (int i = total - 1; i >= 0; i--) {
             Lrc lrc = mLrcData.get(i);
-            if (time >= lrc.getTime()) {
-                if (i == getLrcCount() - 1) {
-                    linePos = getLrcCount() - 1;
-                } else if (time < mLrcData.get(i + 1).getTime()) {
-                    linePos = i;
-                    break;
-                }
+            if (progress >= lrc.getTime()) {
+                //if (i == total - 1) {
+                //    linePos = total - 1;
+                //} else if (progress < mLrcData.get(i + 1).getTime()) {
+                //    linePos = i;
+                //    break;
+                //}
+                linePos = i;
+                break;
             }
         }
         return linePos;
