@@ -25,6 +25,7 @@ import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.ViewGroup;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.OverScroller;
 
@@ -90,6 +91,7 @@ public class LrcView extends View {
     private Paint.Align textAlignment = Paint.Align.CENTER;
 
     private long timelineOffset = 0L;
+    private boolean handleTouch = true;
 
     public LrcView(Context context) {
         this(context, null);
@@ -128,6 +130,7 @@ public class LrcView extends View {
         mPlayDrawable = mPlayDrawable == null ? ContextCompat.getDrawable(context, R.drawable.play_icon) : mPlayDrawable;
         isCurrentTextBold = typedArray.getBoolean(R.styleable.LrcView_isLrcCurrentTextBold, false);
         isLrcIndicatorTextBold = typedArray.getBoolean(R.styleable.LrcView_isLrcIndicatorTextBold, false);
+        handleTouch = typedArray.getBoolean(R.styleable.LrcView_isHandleTouch, true);
         typedArray.recycle();
 
         setupConfigs(context);
@@ -168,7 +171,11 @@ public class LrcView extends View {
     }
 
     private int getLrcWidth() {
-        return getWidth() - getPaddingLeft() - getPaddingRight();
+        int width = getWidth();
+        if (width == 0){
+            width = getMeasuredWidth();
+        }
+        return width - getPaddingLeft() - getPaddingRight();
     }
 
     private int getLrcHeight() {
@@ -428,7 +435,7 @@ public class LrcView extends View {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        if (isLrcEmpty()) {
+        if (isLrcEmpty() || !handleTouch) {
             return super.onTouchEvent(event);
         }
         if (mVelocityTracker == null) {

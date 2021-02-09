@@ -21,6 +21,7 @@
         <attr name="playIcon" format="reference"/>
         <attr name="isLrcCurrentTextBold" format="boolean"/>
         <attr name="isLrcIndicatorTextBold" format="boolean"/>
+        <attr name="isHandleTouch" format="boolean"/>
     </declare-styleable>
 
 </resources>
